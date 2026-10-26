@@ -1,0 +1,50 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: clouddeploy-backend:local
+    pull_policy: build
+    environment:
+      DATABASE_PATH: /data/clouddeploy.db
+      CORS_ORIGINS: "*"
+    volumes:
+      - clouddeploy_data:/data
+    expose:
+      - "8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - app_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: clouddeploy-frontend:local
+    pull_policy: build
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - app_network
+
+volumes:
+  clouddeploy_data:
+
+networks:
+  app_network:
+    driver: bridge
