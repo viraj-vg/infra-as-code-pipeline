@@ -1,4 +1,5 @@
 services:
+
   backend:
     build:
       context: ./backend
@@ -12,6 +13,8 @@ services:
       - app_network
 
   frontend:
+    environment:
+      BACKEND_HOST: backend  
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -19,6 +22,7 @@ services:
       - "8080:80"
     depends_on:
       - backend
+
    
     restart: unless-stopped
     networks:
