@@ -1,0 +1,71 @@
+name: continuous integration
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: code checkout
+        uses: actions/checkout@v4
+
+      - name: setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: install dependencies
+        run: pip install -r requirements.txt
+
+      - name: run tests
+        run: python -m pytest -q
+
+  terraform-checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - name: code checkout
+        uses: actions/checkout@v4
+
+      - name: setup terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: format check
+        run: terraform fmt -check -recursive
+
+      - name: terraform init without backend
+        run: terraform init -backend=false
+        working-directory: terraform/capstone3-tf
+
+      - name: terraform validate
+        run: terraform validate
+        working-directory: terraform/capstone3-tf
+
+      - name: setup tflint
+        uses: terraform-linters/setup-tflint@v4
+
+      - name: tflint
+        run: tflint --recursive
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: code checkout
+        uses: actions/checkout@v4
+
+      - name: build backend image
+        run: docker build -t clouddeploy-backend:ci ./backend
+
+      - name: build frontend image
+        run: docker build -t clouddeploy-frontend:ci ./frontend
