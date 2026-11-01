@@ -69,47 +69,7 @@ jobs:
 
       - name: build frontend image
         run: docker build -t clouddeploy-frontend:ci ./frontend
-
-  # push-staging:
-  #   if: github.event_name == 'pull_request'
-  #   needs: 
-  #   - backend-tests 
-  #   - terraform-checks 
-  #   - docker-build
-  #   runs-on: ubuntu-latest
-  #   environment: staging
-
-  #   steps:
-  #     - name: code checkout
-  #       uses: actions/checkout@v4
-
-  #     - name: configure aws credentials
-  #       uses: aws-actions/configure-aws-credentials@v6
-  #       with:
-  #         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  #         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  #         aws-region: ${{ vars.AWS_REGION }}
-
-  #     - name: login to ecr
-  #       id: ecr
-  #       uses: aws-actions/amazon-ecr-login@v2
-
-  #     - name: build and push images
-  #       env:
-  #         REGISTRY: ${{ steps.ecr.outputs.registry }}
-  #         TAG: ${{ github.sha }}
-  #       run: |
-  #         for name in backend frontend; do
-  #           repo="staging-clouddeploy-${name}"
-  #           if aws ecr describe-images --repository-name "$repo" --image-ids imageTag="$TAG" >/dev/null 2>&1; then
-  #             echo "$repo:$TAG already exists. Skipping."
-  #             continue
-  #           fi
-  #           docker build -t "$REGISTRY/$repo:$TAG" "./$name"
-  #           docker push "$REGISTRY/$repo:$TAG"
-  #         done
-
-
+ 
   deploy-staging:
     if: github.event_name == 'pull_request'
     needs:
