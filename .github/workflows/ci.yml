@@ -184,3 +184,77 @@ jobs:
         run: |
           aws ecs update-service --cluster staging-clouddeploy-cluster --service staging-clouddeploy-service --task-definition ${{ steps.prev.outputs.arn }}
           aws ecs wait services-stable --cluster staging-clouddeploy-cluster --services staging-clouddeploy-service
+
+
+
+  deploy-production:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [backend-tests, terraform-checks, docker-build]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: code checkout
+        uses: actions/checkout@v4
+
+      - name: configure aws credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: login to ecr
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: build and push backend image
+        run: |
+          docker build -t ${{ steps.ecr.outputs.registry }}/prod-clouddeploy-backend:${{ github.sha }} ./backend
+          docker push ${{ steps.ecr.outputs.registry }}/prod-clouddeploy-backend:${{ github.sha }}
+
+      - name: build and push frontend image
+        run: |
+          docker build -t ${{ steps.ecr.outputs.registry }}/prod-clouddeploy-frontend:${{ github.sha }} ./frontend
+          docker push ${{ steps.ecr.outputs.registry }}/prod-clouddeploy-frontend:${{ github.sha }}
+
+      - name: save previous task definition
+        id: prev
+        run: |
+          arn=$(aws ecs describe-services --cluster prod-clouddeploy-cluster --services prod-clouddeploy-service --query 'services[0].taskDefinition' --output text)
+          echo "arn=$arn" >> "$GITHUB_OUTPUT"
+          aws ecs describe-task-definition --task-definition "$arn" --query taskDefinition > task-def.json
+
+      - name: render backend image
+        id: render-backend
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-def.json
+          container-name: backend
+          image: ${{ steps.ecr.outputs.registry }}/prod-clouddeploy-backend:${{ github.sha }}
+
+      - name: render frontend image
+        id: render-frontend
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-backend.outputs.task-definition }}
+          container-name: frontend
+          image: ${{ steps.ecr.outputs.registry }}/prod-clouddeploy-frontend:${{ github.sha }}
+
+      - name: deploy to ecs
+        id: deploy
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-frontend.outputs.task-definition }}
+          cluster: prod-clouddeploy-cluster
+          service: prod-clouddeploy-service
+          wait-for-service-stability: true
+          wait-for-minutes: 5
+
+      - name: health check
+        run: curl --fail --silent --show-error --retry 10 --retry-delay 15 --retry-all-errors ${{ vars.ALB_URL }}/api/health
+
+      - name: roll back to previous task definition
+        if: failure() && steps.deploy.conclusion != 'skipped'
+        run: |
+          aws ecs update-service --cluster prod-clouddeploy-cluster --service prod-clouddeploy-service --task-definition ${{ steps.prev.outputs.arn }}
+          aws ecs wait services-stable --cluster prod-clouddeploy-cluster --services prod-clouddeploy-service
