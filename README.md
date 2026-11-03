@@ -53,5 +53,3 @@ docker build -t clouddeploy-frontend:local ./frontend
 - The backend is reachable by the frontend through the private Compose network and is not published directly on your host.
 - SQLite data is stored in the `clouddeploy_data` Docker volume.
 - No Docker Hub login, AWS account, Terraform, or GitHub Actions is needed for local use.
-
-
